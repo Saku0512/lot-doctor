@@ -32,3 +32,7 @@ src-tauri/binaries/
 # Database
 *.db
 *.sqlite
+
+src-tauri/target/
+src-tauri/Cargo.lock
+src-tauri/gen

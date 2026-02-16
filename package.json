@@ -21,6 +21,7 @@
   "license": "ISC",
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "@tailwindcss/postcss": "^4.1.18",
     "@tauri-apps/cli": "^2.10.0",
     "autoprefixer": "^10.4.24",
     "postcss": "^8.5.6",
