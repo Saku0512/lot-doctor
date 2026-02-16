@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
+use tauri::Emitter;
 use thiserror::Error;
 
 pub mod arp;
@@ -59,6 +60,7 @@ pub struct Device {
 /// Device type classification
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
+#[derive(PartialEq)]
 pub enum DeviceType {
     Router,
     Camera,
