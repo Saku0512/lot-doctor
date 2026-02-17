@@ -51,7 +51,7 @@ async fn check_vulnerabilities(device: Device) -> Result<Vec<vulndb::Vulnerabili
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .setup(|app| {
+        .setup(|_app| {
             // Initialize database
             if let Err(e) = database::init() {
                 eprintln!("Failed to initialize database: {}", e);

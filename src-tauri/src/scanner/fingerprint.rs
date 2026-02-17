@@ -84,7 +84,7 @@ pub fn lookup_vendor(mac: &str) -> Option<String> {
 }
 
 /// Identify device type from MAC and vendor
-pub fn identify_device_type(mac: &str, vendor: &Option<String>) -> DeviceType {
+pub fn identify_device_type(_mac: &str, vendor: &Option<String>) -> DeviceType {
     let vendor_str = vendor.as_deref().unwrap_or("");
 
     // Check for router

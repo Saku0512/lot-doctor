@@ -15,11 +15,11 @@
         </p>
       </div>
       <button
-        on:click={startScan}
+        onclick={startScan}
         disabled={$scanStatus.isScanning}
-        class="px-6 py-3 bg-primary-600 text-white font-medium rounded-lg
-               hover:bg-primary-700 disabled:bg-slate-300 disabled:cursor-not-allowed
-               transition-colors flex items-center gap-2"
+        class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg
+               hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed
+               transition-colors flex items-center gap-2 shadow-sm"
       >
         {#if $scanStatus.isScanning}
           <span class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></span>

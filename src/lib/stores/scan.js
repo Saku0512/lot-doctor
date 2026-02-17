@@ -30,70 +30,56 @@ export const overallScore = derived(devices, ($devices) => {
   return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
 });
 
-// Start scan function (placeholder - will be replaced with Tauri command)
+// Start scan function
 export async function startScan() {
   scanStatus.set({
     isScanning: true,
     progress: 0,
-    currentPhase: 'ネットワークを検索中...',
+    currentPhase: '初期化中...',
   });
 
-  // Simulate scanning phases
-  const phases = [
-    { phase: 'ネットワークを検索中...', progress: 10 },
-    { phase: 'デバイスを検出中...', progress: 30 },
-    { phase: 'MACアドレスを解析中...', progress: 50 },
-    { phase: 'ポートをスキャン中...', progress: 70 },
-    { phase: 'セキュリティを診断中...', progress: 90 },
-    { phase: '完了', progress: 100 },
-  ];
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const { listen } = await import('@tauri-apps/api/event');
 
-  for (const { phase, progress } of phases) {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    scanStatus.update((s) => ({ ...s, currentPhase: phase, progress }));
+    // Reset devices
+    devices.set([]);
+
+    // Listen for progress events
+    const unlisten = await listen('scan-progress', (event) => {
+      const { phase, progress } = event.payload;
+      scanStatus.update((s) => ({ ...s, currentPhase: phase, progress }));
+    });
+
+    // Start scan (Level 2 for active scanning)
+    const result = await invoke('start_scan', { level: 'level2' });
+    
+    // Sort devices by IP for better readability
+    result.sort((a, b) => {
+        const numA = a.ip.split('.').map(Number);
+        const numB = b.ip.split('.').map(Number);
+        for (let i = 0; i < 4; i++) {
+            if (numA[i] !== numB[i]) return numA[i] - numB[i];
+        }
+        return 0;
+    });
+
+    devices.set(result);
+    unlisten();
+
+  } catch (error) {
+    console.error('Scan failed:', error);
+    scanStatus.update(s => ({ 
+        ...s, 
+        currentPhase: `エラーが発生しました: ${error}`,
+        progress: 100 
+    }));
+  } finally {
+    scanStatus.update((s) => ({
+      ...s,
+      isScanning: false,
+      progress: 100,
+      currentPhase: s.currentPhase.startsWith('エラー') ? s.currentPhase : '完了',
+    }));
   }
-
-  // Mock device data (will be replaced with real scan results)
-  devices.set([
-    {
-      id: '1',
-      name: 'Buffalo ルーター',
-      type: 'router',
-      ip: '192.168.1.1',
-      mac: 'AA:BB:CC:DD:EE:FF',
-      vendor: 'Buffalo Inc.',
-      securityLevel: 'warning',
-      issues: ['管理画面がHTTPで公開されています', 'UPnPが有効です'],
-    },
-    {
-      id: '2',
-      name: 'スマートスピーカー',
-      type: 'smart_speaker',
-      ip: '192.168.1.10',
-      mac: '11:22:33:44:55:66',
-      vendor: 'Amazon',
-      securityLevel: 'safe',
-      issues: [],
-    },
-    {
-      id: '3',
-      name: 'ネットワークカメラ',
-      type: 'camera',
-      ip: '192.168.1.20',
-      mac: '77:88:99:AA:BB:CC',
-      vendor: 'TP-Link',
-      securityLevel: 'danger',
-      issues: [
-        'デフォルトパスワードが使用されています',
-        'ファームウェアが古いバージョンです',
-        'Telnetポートが開放されています',
-      ],
-    },
-  ]);
-
-  scanStatus.set({
-    isScanning: false,
-    progress: 100,
-    currentPhase: '完了',
-  });
 }

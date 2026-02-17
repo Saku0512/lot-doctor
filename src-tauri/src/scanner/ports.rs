@@ -24,20 +24,33 @@ const COMMON_PORTS: &[u16] = &[
 
 /// Scan common ports on target IP
 pub async fn scan_ports(ip: &str) -> Result<Vec<Port>, ScanError> {
-    let mut open_ports = Vec::new();
+    let mut tasks = Vec::new();
+    let ip = ip.to_string();
 
     for &port in COMMON_PORTS {
-        if is_port_open(ip, port).await {
-            let service = identify_service(port);
-            let is_secure = is_secure_service(port);
+        let ip_clone = ip.clone();
+        tasks.push(tokio::spawn(async move {
+            if is_port_open(&ip_clone, port).await {
+                let service = identify_service(port);
+                let is_secure = is_secure_service(port);
 
-            open_ports.push(Port {
-                number: port,
-                protocol: "tcp".to_string(),
-                service: Some(service.to_string()),
-                version: None,
-                is_secure,
-            });
+                Some(Port {
+                    number: port,
+                    protocol: "tcp".to_string(),
+                    service: Some(service.to_string()),
+                    version: None,
+                    is_secure,
+                })
+            } else {
+                None
+            }
+        }));
+    }
+
+    let mut open_ports = Vec::new();
+    for task in tasks {
+        if let Ok(Some(port)) = task.await {
+            open_ports.push(port);
         }
     }
 
