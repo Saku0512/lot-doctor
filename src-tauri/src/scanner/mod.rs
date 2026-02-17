@@ -11,6 +11,8 @@ pub mod arp;
 pub mod ports;
 pub mod fingerprint;
 pub mod mdns;
+pub mod nbns;
+pub mod ssdp;
 
 /// Scan level determining the depth of security analysis
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
@@ -146,56 +148,60 @@ pub async fn scan_network(
 
     // Level 1: Passive scanning
     emit_progress(app, "ネットワークを検索中...", 10);
-    
-    // Execute ARP scan and mDNS scan concurrently
-    let (discovered_result, mdns_names): (Result<Vec<(String, String)>, ScanError>, Result<std::collections::HashMap<String, String>, tokio::task::JoinError>) = tokio::join!(
+
+    // Phase 1: Execute ARP + mDNS + SSDP concurrently
+    let (discovered_result, mdns_names, ssdp_names) = tokio::join!(
         arp::discover_devices(),
         // Run mDNS scan in a blocking thread since mdns-sd is synchronous
         tokio::task::spawn_blocking(|| {
             mdns::scan_mdns(std::time::Duration::from_secs(3))
-        })
+        }),
+        ssdp::scan_ssdp(std::time::Duration::from_secs(3)),
     );
 
     let discovered = discovered_result?;
     let mdns_map = mdns_names.map_err(|e| ScanError::Internal(e.to_string()))?;
 
-    emit_progress(app, "デバイスを識別中...", 30);
+    // Phase 2: Run NBNS queries on discovered IPs (needs ARP results first)
+    emit_progress(app, "デバイス名を解決中...", 25);
+    let ip_list: Vec<String> = discovered.iter().map(|(ip, _)| ip.clone()).collect();
+    let nbns_names = nbns::scan_nbns(&ip_list, std::time::Duration::from_secs(2)).await;
+
+    emit_progress(app, "デバイスを識別中...", 35);
     for (ip, mac) in discovered {
         let vendor = fingerprint::lookup_vendor(&mac);
-        let device_type = fingerprint::identify_device_type(&mac, &vendor);
-        
+
         // Resolve hostname (DNS PTR)
         let dns_hostname: Option<String> = match ip.parse::<std::net::IpAddr>() {
             Ok(ip_addr) => dns_lookup::lookup_addr(&ip_addr).ok(),
             Err(_) => None,
         };
 
-        // Determine display name
-        // Priority: mDNS Name > DNS Hostname > Vendor Name
+        // Gather names from all resolution methods
         let m_name = mdns_map.get(&ip).cloned();
-        
-        // If mDNS name is available, it's usually the best "user friendly" name
-        // If not, fall back to DNS hostname
-        // If not, fall back to locally constructed name
-        let name: Option<String> = if let Some(ref m) = m_name {
-            Some(m.clone())
-        } else if let Some(ref h) = dns_hostname {
-            Some(h.clone())
-        } else if let Some(ref v) = vendor {
-            Some(format!("{} Device", v))
-        } else {
-            None
-        };
-        
-        // We can treat mDNS name as hostname if DNS lookup failed
-        let hostname = dns_hostname.or(m_name);
+        let nb_name = nbns_names.get(&ip).cloned();
+        let ssdp_name = ssdp_names.get(&ip).cloned();
+
+        // Determine display name
+        // Priority: mDNS > NBNS > SSDP > DNS PTR > Vendor fallback
+        let name: Option<String> = m_name.clone()
+            .or(nb_name.clone())
+            .or(ssdp_name)
+            .or(dns_hostname.clone())
+            .or(vendor.as_ref().map(|v| format!("{} デバイス", v)));
+
+        // Identify device type using resolved name for better classification
+        let device_type = fingerprint::identify_device_type(&mac, &vendor, &name);
+
+        // hostname field: prefer DNS PTR, then mDNS, then NBNS
+        let hostname = dns_hostname.or(m_name).or(nb_name);
 
         devices.push(Device {
             id: uuid::Uuid::new_v4().to_string(),
             name,
             device_type,
             ip,
-            mac, // mac is String
+            mac,
             vendor,
             hostname,
             open_ports: Vec::new(),

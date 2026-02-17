@@ -22,12 +22,24 @@ pub fn scan_mdns(timeout: Duration) -> HashMap<String, String> {
     // Browse for common services
     // Scanning for efficient service types for device discovery
     let services_to_scan = vec![
-        "_googlecast._tcp.local.",  // Google devices
-        "_airplay._tcp.local.",     // Apple devices (AirPlay)
-        "_companion-link._tcp.local.", // Apple devices (HomeKit/Sidecar)
-        "_device-info._tcp.local.", // General device info
-        "_ipp._tcp.local.",         // Printers
-        "_http._tcp.local.",        // Web interfaces
+        "_googlecast._tcp.local.",       // Google devices
+        "_airplay._tcp.local.",          // Apple devices (AirPlay)
+        "_companion-link._tcp.local.",   // Apple devices (HomeKit/Sidecar)
+        "_device-info._tcp.local.",      // General device info
+        "_ipp._tcp.local.",              // Printers
+        "_http._tcp.local.",             // Web interfaces
+        "_smb._tcp.local.",              // Windows/NAS file sharing
+        "_rdp._tcp.local.",              // Remote desktop
+        "_raop._tcp.local.",             // AirPlay audio (Apple)
+        "_sleep-proxy._udp.local.",      // Apple sleep proxy
+        "_workstation._tcp.local.",      // Linux/macOS workstations
+        "_homekit._tcp.local.",          // HomeKit accessories
+        "_hap._tcp.local.",              // HomeKit Accessory Protocol
+        "_matter._tcp.local.",           // Matter smart home devices
+        "_spotify-connect._tcp.local.",  // Spotify Connect devices
+        "_amzn-wplay._tcp.local.",       // Amazon devices
+        "_androidtvremote2._tcp.local.", // Android TV
+        "_touch-able._tcp.local.",       // iOS Remote app
     ];
     
     // Using a receiver to collect events
@@ -49,14 +61,30 @@ pub fn scan_mdns(timeout: Duration) -> HashMap<String, String> {
                 let fullname = info.get_fullname();
                 // Extract instance name (part before first dot)
                 let instance_name = fullname.split('.').next().unwrap_or("").to_string();
-                
+
                 // Get hostname (e.g. "My-iPhone.local.")
                 let hostname = info.get_hostname();
                 let clean_hostname = hostname.trim_end_matches('.');
-                
-                // Prefer instance name if it looks like a user-set name (contains spaces or mixed case), 
-                // otherwise fall back to hostname
-                let display_name = if !instance_name.is_empty() && instance_name != clean_hostname {
+
+                // Check TXT records for friendly name (fn, n, name keys)
+                let txt_name: Option<String> = info.get_properties().iter().find_map(|prop| {
+                    let key = prop.key();
+                    if key == "fn" || key == "n" || key == "name" {
+                        let val = prop.val_str();
+                        if !val.is_empty() {
+                            Some(val.to_string())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                });
+
+                // Priority: TXT friendly name > instance name > hostname
+                let display_name = if let Some(ref tn) = txt_name {
+                    tn.clone()
+                } else if !instance_name.is_empty() && instance_name != clean_hostname {
                     instance_name
                 } else {
                     clean_hostname.to_string()
